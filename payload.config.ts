@@ -24,9 +24,25 @@ import { mongooseAdapter } from '@payloadcms/db-mongodb'
 import { buildConfig } from 'payload/config'
 import sharp from 'sharp'
 import { fileURLToPath } from 'url'
+import { postgresAdapter } from '@payloadcms/db-postgres'
+import { cloudStoragePlugin } from '@payloadcms/plugin-cloud-storage'
+import { s3Adapter } from '@payloadcms/plugin-cloud-storage/s3'
+import { MediaCollection } from '@/payloadcms/collections/mediaCollection'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
+
+const r2Adapter = s3Adapter({
+  config: {
+    endpoint: process.env.S3_ENDPOINT,
+    credentials: {
+      accessKeyId: process.env.S3_ACCESS_KEY_ID!,
+      secretAccessKey: process.env.S3_SECRET_ACCESS_KEY!,
+    },
+    // ... Other S3 configuration
+  },
+  bucket: process.env.S3_BUCKET!,
+})
 
 export default buildConfig({
   //editor: slateEditor({}),
@@ -40,6 +56,24 @@ export default buildConfig({
         update: () => false,
       },
       fields: [],
+    },
+    {
+      slug: 'projects',
+      admin: {
+        useAsTitle: 'title',
+      },
+      fields: [
+        {
+          name: 'title',
+          type: 'text',
+        },
+        {
+          name: 'isFeatured',
+          type: 'checkbox',
+          label: 'Is Featured Project',
+          admin: {},
+        },
+      ],
     },
     {
       slug: 'pages',
@@ -57,30 +91,26 @@ export default buildConfig({
         },
       ],
     },
-    {
-      slug: 'media',
-      upload: true,
-      fields: [
-        {
-          name: 'text',
-          type: 'text',
-        },
-      ],
-    },
+    MediaCollection,
   ],
   secret: process.env.PAYLOAD_SECRET || '',
   typescript: {
     outputFile: path.resolve(dirname, 'payload-types.ts'),
   },
-  // db: postgresAdapter({
-  //   pool: {
-  //     connectionString: process.env.POSTGRES_URI || ''
-  //   }
-  // }),
-  db: mongooseAdapter({
-    url: process.env.MONGODB_URI || '',
+  db: postgresAdapter({
+    pool: {
+      connectionString: process.env.POSTGRES_URI || '',
+    },
   }),
-
+  plugins: [
+    cloudStoragePlugin({
+      collections: {
+        'r2-media': {
+          adapter: r2Adapter, // see docs for the adapter you want to use
+        },
+      },
+    }),
+  ],
   /**
    * Payload can now accept specific translations from 'payload/i18n/en'
    * This is completely optional and will default to English if not provided
